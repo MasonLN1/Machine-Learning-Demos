@@ -7,31 +7,31 @@ some of our isolated codes utilized throughout our courses.
 
 Summaries
 ---
-BreastCancerDEMO
+BreastCancerDEMO -
 A detailed analysis of a breast cancer tumour dataset, focused on utilizating data imputation and principle component analysis within classification models.
 Possible adjustments: Alternative models and hyperparameter tuning, ideally focusing on ensemble models such as a Random Forest over a Decision Tree.
 
-CHDDetectionDEMO
+CHDDetectionDEMO -
 A detailed analysis of coronary heart disease, focused on identifying feature importance and experimenting with various model architechtures.
 Possible adjustments: More comprehensive Neural Network models, prevent overfitting using intelligent learning rates and early stopping calls.
 
-ConcreteAnalysisDEMO
+ConcreteAnalysisDEMO -
 Identification of an ideal concrete formula to maximize concrete strength
 Possible adjustments: Consider non-linear models (though the data visualization demonstrated strong linear relationships between our features and target).
 
-DegausserDEMO
+DegausserDEMO -
 Construction of an AI model that can unblur images that with known (or approximated) blur parameters.
 Possible adjustments: Include non-gaussian blurred images in the training data to expand the model to accomodate different types of blur.
 
-L2penaltyWrapperDEMO
+L2penaltyWrapperDEMO -
 Incorporation of an L2 penalty method on a gradient descent optimizer algorithm to demonstrate boundary conditions.
 Possible adjustments: Include more examples and plots.
 
-OptimizerVisualizationDEMO
+OptimizerVisualizationDEMO -
 A tool created to trace the path at each step of various gradient descent-based algorithms to preview stability and speed of convergence across several optimizers
 Possible adjustments: Explore highly pathological examples.
 
-ResNeXtDEMO
+ResNeXtDEMO -
 The best performing model architechture demonstrated in class for a given task was improved by using a novel model architechture from scratch that featured decreased training time and improved accuracy
 Possible adjustments: Explore beyond ResNeXt; various CNNs exist that are based off of ResNet that can be tested.
 
