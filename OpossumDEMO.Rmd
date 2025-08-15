@@ -1,0 +1,161 @@
+---
+title: 'Predicting Opossum Size'
+author:
+- 'By: Mason Nolan'
+date: "2024-12-06"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+set.seed(3141592)
+#install.packages("tidyverse")
+#install.packages("ggrepel")  Uncomment these lines if the following packages have not been installed on your device
+#install.packages("tidyr")
+#install.packages("reshape2")
+#install.packages("lmtest")
+#install.packages("olsrr")
+library(tidyverse)
+library(ggrepel)
+library(tidyr)
+library(reshape2)
+library(lmtest)
+library(olsrr)
+```
+
+---
+
+## Introduction
+
+Humans tend to grow all parts of their body proportionately, and we would expect to be able to get an estimate of, say, somebody's height if we were given their weight, age, inseam, gender, neck girth, chest girth, etc. Significant deviations from what we would expect in these measurements relative to each other may be indication of abnormal growth. For example, an unusually large head size with respect to the rest of the person's body may indicate hydrocephalus. In our case, we will be investigating characteristic of the common opossum (Didelphis marsupialis) to exercise our ability in predicting growth patterns on a smaller mammal. Connecting characteristics of an opossum provides legitimate benefits to biologists and conservationists as well, who can extend our model to investigate size and age of an opossum, which may indicate population boom, or decline due to starvation if we notice a trend of unusually small opossums. The dataset we will be using comes from the data science textbook "Data Analysis and Graphics Using R", and contains 104 samples (n=104) and 14 features. The sample size is limited, as the dataset is intentionally trimmed to serve as a practical assignment for those studying data science.
+
+|   The features in our dataset are: Case # (index), total length in cm, site # (site where opossum was trapped), tail length in cm, population (location of the site), foot length in mm, sex, ear length in mm, age, eye width in mm, head length in mm, chest girth in cm, skull width in mm, and belly girth in cm. The only categorical data in this data set is the site (not numeric since the number is refering to specific encampments), location, and sex of the opossum. We will be excluding the site and location from our dataset, since these are all the same species of opossum and these features serve more as metadata, to give us an idea of the health of the population from specific locations and sites, but this is not necessary for our models. The rest of the data is numerical, though "age" is not continuous. Here is a preview of our dataset:
+
+```{r, echo=FALSE}
+opossum_raw <- read.csv("C://Users//17095//OneDrive//Desktop//possum.csv")
+head(opossum_raw, 5)
+```
+|   In our project, we will focus on predicting total length based on these other metrics (besides the dropped features we mentioned), so our target variable is "totlngth" and all other remaining variables are our predictive features. Again, since we expect the opossum to grow proportionately and most of our features are measured in length, we propose using a multiple linear regression model. It may be the case that scaling occurs quadratically or cubically since these lengths may scale in multiple dimensions (such as the case with girths), but we will investigate that when the time comes and transform our variables appropriately. Linear regression models make assumptions that we will have to verify statistically and graphically: the overarching assumption that we have linear relationships, and that our error terms are normally distributed, independant, and have constant variance. As such, we will need to plot the distributions of our features to visualize that our data appears to be primarily normally distributed. We will also plot our residuals once the model is created to visualize if the variance is non-constant. Outliers can also be detected by creating boxplots, and if our boxplots contain a large number of outliers or outliers of an absurd magnitude, we may consider pruning our dataset after some testing. Feature correlation will be demonstrated by a correlation matrix, where large amounts of correlation may be an indication of multicollinearity which may cause unnecessary noise in our model, though some multicollinearity is expected since we would predict that many of our size measurements are proportionate to eachother.
+|   In cases where these assumptions are violated by our plots, we may transform the variables and/or adjust the parameters and perform Shapiro-Wilks test to confirm error normality, and a Breusch-Pagan test to confirm constant variance. Given our choice of model, there is no need for scaling our variables to make them more comparable. Since our model has high dimensionality (10 predictive features), a simple plot of the model is not feasible, unlike a 2D or 3D plot in the case of simple linear regression or linear regression with 2 predictors, respectively. If our model can be simplified, we will do so to increase the interpretability of our model, and we will verify our decision by using performance metrics such as $R^2_{adj}$ and Mallow's $C_p$ criterion. Our final estimates will be verified and our confidence intervals plotted, which will give us indications of how accurate our feature importance is and what that means in the context of our data.
+
+## Data Analysis
+
+We will need to clean our dataset first. There are missing values in the dataset, and we have not actually removed those irrelevant features yet. Lastly, the categorical values of "m" and "f" in the sex column will need to be changed to "1" and "0" to be compatible with our models. After doing so, we get the following preview of our dataset:
+
+```{r, echo=FALSE}
+opossum_drop <- opossum_raw %>% drop_na() %>% select(totlngth, sex, age, hdlngth, skullw, taill, footlgth, earconch, eye, chest, belly) %>% mutate(across(everything(), ~ as.integer(ifelse(. == "m", as.numeric(1), ifelse(. == "f", 0, .)))))
+head(opossum_drop, 5) # We only select the relevant features, and change all M/F to 1/0.
+print(paste("The number of samples in the cleaned dataset is", dim(opossum_drop)[1]))
+```
+Our sample size shrunk by 3, but this is not very significant so we have no cause to worry about the validity of our results. We will now plot the distributions of our features:
+
+```{r, echo=FALSE, fig.align='center'}
+opossum_values <- gather(opossum_drop, cols, value) # Split the dataframe into groups of labels and their values
+ggplot(opossum_values, aes(x = value)) + 
+  geom_histogram(aes(fill=cols), binwidth=0.5) + facet_wrap(~ cols, scales = "free") # Plot the histogram of each label
+```
+
+We see that most features appear to follow approximately a bell curve, giving us no reason to believe that the majority of our data is not normally distributed (and by extension the error terms most likely), with the exception of sex which is clearly Bernoulli distributed since it is a categorical variable that only has two classes in the dataset. There are a few exceptions, namely foot length and ear width, that seem to exhibit two distinct peaks. A hypothesis for why this may be would be that there are two strata of opossums that have distinct normaly distributions for these features, and we are witnessing the sum of their distributions when we view the whole dataset. These strata may be male and female opossums, or possibly juvenile and adult opossums. This implies that our dataset could be improved by performing stratified sampling, if the sampler identified which subpopulations showed the greatest differences. Age is also slightly skewed to the right, but the number of elderly opossums in our samples are artifically inflated, since we are sampling opossums in captivity, which tend to live much longer on average than wild opossums, so the amount of elderly opossums we count may be unrealistic and our distribution may appear more symmetric in more realistic circumstances.
+
+```{r, echo=FALSE, fig.align='center'}
+ggplot(opossum_values, aes(x = value, y = cols)) + 
+  geom_boxplot(aes(fill=cols))
+```
+
+Our boxplots of each feature did show some outliers present as small black dots, but not a particularly large amount relative to the sample size. Since there is not many outliers, we will not damage our data integrity by removing these points.
+
+```{r, echo=FALSE, fig.align='center'}
+corrmatrix <- cor(opossum_drop)
+corrmatrixmelt <- melt(corrmatrix)
+ggplot(corrmatrixmelt, aes(Var1, Var2, fill = value)) +
+geom_tile() +
+geom_text(aes(label = round(value, 2)), color = "white", size = 3) +
+scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1, 1), name = "Correlation") +
+labs(x = NULL, y = NULL)
+```
+The correlation matrix shows mostly moderately high amounts of postive correlation amongst the size metrics. This is to be expected, since as an opossum grows in one body part, we would expect the opossum to grow most everywhere else. The highest degree of correlation appears between ear width and foot length which seems surprising, but there is no obviously redundant variables present, which would be indicated by a correlation of nearly 1 or -1, or a row/column that is practically identical to another (with the exception of in skull width and head length, but we will address unnecessary features later).
+
+|   We can now move on to the presentation of our model and it's results, before deciding if the model is appropriate or needs tuning:
+
+```{r, echo=FALSE}
+model <- lm(totlngth ~ age + sex + hdlngth + skullw + footlgth + taill + earconch + eye + chest + belly, data=opossum_drop)
+model
+```
+
+Ordinary least squares gives us a model of:
+
+$$y=-18.0201-0.0012x_1-0.9774x_2+0.4191x_3+0.009x_4+0.2435x_5\\    + 1.0435x_6+0.0994x_7+0.1731x_8+0.1040x_9+0.0414x_{10}.$$
+We can view how this model performs by viewing the summary and ANOVA table in R:
+```{r, echo=FALSE}
+summary(model)
+anova(model)
+```
+We achieve an $R^2_{adj}$ of $0.7002$. Given the complexity of the biological structure of any mammal, finding that we have $70\%$ of variance explained by our model is not bad. Our MSE is 5.22, indicating the square of our error tends to be that much. Assuming all data is normally distributed, $MAE \approx \sqrt{MSE}\cdot\sqrt{\frac{2}{\pi}}=1.823.$ This is our mean absolute error, indicating that our estimates tend to be off by an average of 1.823. Given that our total length values range from 75 to 95cm, this is a reasonable estimate. 
+
+|   Before tuning our model for improvement, we will plot the residuals and determine if the model is even appropriate. We need to start with our residual models.
+```{r, echo=FALSE, fig.align='center'}
+plot(model)
+```
+
+The residuals vs fitted plot keeps most of the residuals in a horizontal band about the x-axis, but it also somewhat shows that the residuals seem to be smaller near the minimum and maximum values predicted for total length. This is reasonably explained by growth being more erratic between juvenile and adult opossums, so the size disparities among opossums will tend to vary more while the opossums are growing, rather than at their largest or smallest states. This does cause some sorry if our variance may be considered heteroskedastic, so we perform a Breusch-Pagan test:
+```{r, echo=FALSE}
+bptest(model)
+```
+The BP test produced a p-value of 0.07648. With the usual threshold of $\alpha=0.05$, we can conclude that there is not enough evidence to confidently say that our confidence is variance is non-constant, so there is no issue with our model so far.
+
+|   The QQ-plot showed that the residuals reasonably followed where we would expect our residuals to be if they were normally distributed. There was some deviancy near the tail ends, and a brief increase near the middle. We can perform a Shapiro-Wilks test to verify if our residuals can reasonably be believed to be normally distributed.
+```{r, echo=FALSE}
+shapiro.test(resid(model))
+```
+
+We produce a p-value of 0.2629, and with our $\alpha=0.05$, there is insufficient evidence to reject the null hypothesis of the test: that our residuals are normally distributed.
+
+|   The leverage plot also did not show any samples with a significantly large cook's distance, so there were no significant leverage points that we should have considered to be overinfluencing our model and would be required to be pruned.
+
+|   We should now address whether our model's multicollinearity may be an issue. Our summary and ANOVA tables both indicated that we had several features which did not have a large t-statistic or f-statistic, implying that these features may be statistically insignificant for predicting our target variable, total length of the opossum. We may examine which subset of our model produces the best model by using the olsrr package in R to get the following table:
+```{r, echo=FALSE}
+ols_step_best_subset(model)
+```
+There are several ways to choose a best model from this chart. The simplest way is to choose the largest $R^2_{adj}$, which would be model 4, which suggests we should only use sex, head length, foot length, and tail length to predict total length. Lowest AIC implies we should choose model 4. Lowest SBC also suggests choosing model 4. The Mallow's $C_{p}$ criterion requires we keep the $C_p$ value as low as possible while remaining close to the number of estimators in our model (predictive features plus one, to account for the bias/intercept). This implies model 3 is our best bet. Given that model 4 is considered the best model by the most metrics we have considered, we will improve and simplify our model by changing to model 4. In doing so, we get the following new plots and tables:
+```{r, echo=FALSE, fig.align='center'}
+model_fix <- lm(totlngth ~ sex + hdlngth + footlgth + taill, data=opossum_drop)
+summary(model_fix)
+anova(model_fix)
+plot(model_fix)
+```
+
+Our residual plots look mostly the same, though our ANOVA tables and summary table have improved. We have a larger $R^2_{adj}$ value, indicating this model explains more variance than our previous one. Additionally, the t-statistics and F-statistics indicate that each of our predictors are statistically significant (with head length and tail length in particular being strong predictors). The MSE improved and shrunk down to 5.00. The MAE can be calculated directly, which we shall do now instead of approximating it with our previous formula:
+```{r, echo=FALSE}
+print(paste("The MAE of our new model is", round(mean(abs(opossum_drop$totlngth-fitted(model_fix))), digits=4)))
+# We could also use mean(abs(resid(model_fix))).
+```
+This implies our model's errors tend to be about 1.7178, an improvement over the previous estimate of 1.8230 (of $5.77\%$). We should also view what our new model actually is, since the coefficients have changed:
+
+```{r, echo=FALSE, fig.align='center'}
+coefplot <- data.frame(predictors = names(coef(model_fix)), estimate = coef(model_fix))
+ggplot(coefplot, aes(x = predictors, y = estimate)) + geom_bar(stat = "identity") + geom_errorbar(aes(ymin = confint(model_fix)[, 1], ymax = confint(model_fix)[, 2]), width = 0.2) + ylim(-30,2) # Plot the coefficients and include confidence whiskers.
+```
+
+Our model is now $$y=-15.7982-1.0289x_1+0.4725x_2+0.3294x_3+1.0161x_4$$
+where $x_1=$ sex, $x_2=$ head length (mm), $x_3=$ foot length (mm), and $x_4=$ tail length (cm). 
+
+|   We see in the above graph that our confidence intervals for our intercept and the sex feature are quite broad, which aligns with what we saw in the summary chart; these predictors had the smallest t-statistics and the least indication that these predictors are strong indicators for finding the total length of an opossum. Then regardless of model, we can say that foot length, head length, and tail length are the most important predictors of total length and extra measurements are likely redundant, though sex may slightly be indicative of total length as well. Sex being an indicator of length would align with our previous affirmation that there are two strata of opossum that appear to have distinct distributions for certain measurements. Since age was dropped as a predictor, we can put forward that these strata are more likely than the alternative criteria we proposed that age was the more significant factor. Although we would expect that genuine infant opossums to have significantly smaller size and length, most of our data is collected from opossums that are at least 1 year old, and opposums reach maturity between 8-12 months, so this hypothesis would need to be tested with a larger dataset that collects data from opposums during this juvenile period.
+
+## Conclusion
+
+|   Our simplified multiple linear regression model proved to be an effective predictor of the length of opossums given only a few measurements, much less than originally taken in the dataset, and the sex of the creature. The significance of some of the features, namely head width, tail length, and foot length were very strong predictors of total length, which has a few implications, namely, that we would not expect to see any irregularities amongst these predictors when compared to a similarly sized opossum. For example, this implies that feet length and tail length do not vary much among opossums that are, say, 90cm long; it is rare for an opossum to have stubby tails, feet, shrunken heads, or the opposite (unusually long tails, large feet, large heads). Additionally, low amount of outliers (particularly in the feature total length, which showed no outliers across any samples) and somewhat short boxplot whiskers indicate that the size of opossums do not vary to a great degree anyways.
+
+|   Some of our features in our original dataset, after viewing the histograms, suggested that they came from a distribution that was the sum of at least 2 normal distributions. This would imply that there are at least 2 strata of opossum that have distinct distributions for their size metrics. Since sex was our most important feature that was not a size metric, we can conclude that these strata are likely "male" and "female". Age is also a consideration for strata, highlight prepubescent versus mature opossums, but our dataset only sampled opossums that were at least a year old which would exclusively be adult opossums, so a more detailed dataset would be required to investigate this potential distinction in a subpopulation.  
+
+|   We infer from finding multicollinearity that many of our initial features were irrelevant, which can prove useful for saving time in future sampling of opossums and other similar creatures. Head length and skull width showed similar correlation matrix rows, which we could intuitively assume was due to the fact that these measurements are nearly measuring the same thing (head size). Our model showed that it was unnecessary to include both metrics in a model, and removing one of them in fact removed noise and improved our model's accuracy.
+
+|   Although our model was highly effective at predicting total length from just a few measurements, improvements could be made to generalize the model. Our dataset only measured adult opossums, which can limit the more interesting growth patterns as an opossum becomes pubescent, which would also likely exhibit rapid non-linear growth until growth tapers off as the opossum reaches adulthood. There were only 2 features used that did not relate to measuring size, potentially not accounting for a good portion of variance by not considering enough information. Other features that could be included in future samples may include weight, lean body mass, health, and diet as possible sources of explanation for differences in length among opossums. As mentioned before, the data could also be stratified to show more meaningful explanations between subclasses of opossum and providing better explanations of feature distributions.
+
+|   Growth is a predictable metric when comparing other growing parts; it is common for body parts, of sums of body parts, to grow in unison with other (possibly very distinct) parts. Verifying this phenomenon with common opossums and identifying that there does not seem to be a particular complex relationship between the growth of various body parts helps us come to an understanding that aligns with our intuition that nearly *all* growth occurs simultaneously. We also discover a possible sexual dimorphism amongst opossums by noting the fact that it is a significant feature in our model, meaning it is very likely that sex is correlated with opossum size. We would be careful not to generalize this information to all mammals, as sexual dimorphism is known to not be a unanimous trait across all animals. Hyenas, rats, and bats are examples of mammals that show little meaningful difference in measurable traits that render the sexes distinct, aside from obvious things like genitalia. Discovering unique facts about the opossum may lead us to draw conclusions about classes of animals, but all hypothesis should be tested and we should take a cautious and scientific approach to collecting data and reporting our findings as facts without strong evidence. 
+
+---
