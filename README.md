@@ -27,6 +27,10 @@ L2penaltyWrapperDEMO -
 Incorporation of an L2 penalty method on a gradient descent optimizer algorithm to demonstrate boundary conditions.
 Possible adjustments: Include more examples and plots.
 
+OpossumDEMO - 
+Linear regression and analysis of opossum sizes to investigate age, gender, and proportionality of the creature.
+Possible adjustments: For binary targets (such as gender), investigate logistic regression. For other targets (such as age), investigate non-linear models.
+
 OptimizerVisualizationDEMO -
 A tool created to trace the path at each step of various gradient descent-based algorithms to preview stability and speed of convergence across several optimizers
 Possible adjustments: Explore highly pathological examples.
